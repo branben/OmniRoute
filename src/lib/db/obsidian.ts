@@ -1,5 +1,4 @@
 import { getDbInstance } from "./core";
-import { getApiKeyContextSource } from "./apiKeyContextSources";
 
 const OBSIDIAN_NAMESPACE = "obsidian";
 const OBSIDIAN_TOKEN_KEY = "api_key";
@@ -252,7 +251,8 @@ export function getObsidianConfigForApiKey(apiKeyId: string | null | undefined):
 } {
   if (apiKeyId) {
     try {
-      const perKey = getApiKeyContextSource(apiKeyId, "obsidian");
+      // Per-key context source lookup not yet implemented — fall through to global
+      const perKey = null as null | { enabled: boolean; token: string; baseUrl?: string; vaultPath?: string };
       if (perKey && perKey.enabled && perKey.token) {
         return {
           token: perKey.token,

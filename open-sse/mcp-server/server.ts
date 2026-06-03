@@ -77,6 +77,8 @@ import {
 import { memoryTools } from "./tools/memoryTools.ts";
 import { skillTools } from "./tools/skillTools.ts";
 import { agentSkillTools } from "./tools/agentSkillTools.ts";
+import { skillRegistry } from "../../src/lib/skills/registry.ts";
+import { skillExecutor } from "../../src/lib/skills/executor.ts";
 import { pluginTools } from "./tools/pluginTools.ts";
 import { compressionTools } from "./tools/compressionTools.ts";
 import { gamificationTools } from "./tools/gamificationTools.ts";
@@ -1222,6 +1224,7 @@ export function createMcpServer(): McpServer {
   });
 
   // ── Dynamic Skill Tools (from skills table) ──
+  const skillToMcpToolName = (skill: { name: string }) => `skill_${skill.name.replace(/[^a-z0-9_-]/gi, "_")}`;
   try {
     const enabledSkills = skillRegistry.list().filter((s) => s.enabled);
     for (const skill of enabledSkills) {
