@@ -56,6 +56,8 @@ async function getCertTrusted(): Promise<boolean> {
   }
 }
 
+const emptyMappings: Record<string, Array<{ source: string; target: string }>> = {};
+
 export async function GET(): Promise<Response> {
   try {
     // Fetch MITM status and cert trust in parallel
@@ -64,14 +66,18 @@ export async function GET(): Promise<Response> {
       getCertTrusted(),
     ]);
 
-    // Fetch DB-backed datasets in parallel
-    const [agentStates, bypassPatterns, allAgents] = await Promise.all([
-      getAllAgentBridgeStates(),
-      getUserBypassPatterns(),
-      getAllAgentsStatus(),
-    ]);
+    // Fetch DB-backed datasets individually so a failure in one
+    // does not block the entire dashboard render.
+    let agentStates: Awaited<ReturnType<typeof getAllAgentBridgeStates>> = [];
+    let bypassPatterns: Awaited<ReturnType<typeof getUserBypassPatterns>> = [];
+    let allAgents: Awaited<ReturnType<typeof getAllAgentsStatus>> = [];
 
-    // Build mappings map from DB, keyed by agent_id
+    try { agentStates = getAllAgentBridgeStates(); } catch { /* graceful degradation */ }
+    try { bypassPatterns = getUserBypassPatterns(); } catch { /* graceful degradation */ }
+    try { allAgents = await getAllAgentsStatus(); } catch { /* graceful degradation */ }
+
+    // Build mappings map from DB, keyed by agent_id.
+    // Per-agent try/catch so one agent's missing data does not block the rest.
     const mappings: Record<string, Array<{ source: string; target: string }>> = {};
     for (const agent of allAgents) {
       try {
@@ -83,7 +89,7 @@ export async function GET(): Promise<Response> {
           }));
         }
       } catch {
-        // Agent may have no mappings — skip
+        // Per-agent failure: other agents still populate correctly
       }
     }
 
@@ -105,7 +111,7 @@ export async function GET(): Promise<Response> {
       serverState,
       agentStates,
       bypassPatterns,
-      mappings,
+      mappings: Object.keys(mappings).length > 0 ? mappings : emptyMappings,
     });
   } catch (err) {
     const msg = sanitizeErrorMessage(err instanceof Error ? err.message : String(err));
