@@ -19,6 +19,7 @@ const log = createLogger("mitm-manager");
 // Store server process
 let serverProcess: ChildProcess | null = null;
 let serverPid: number | null = null;
+let lastStartedAt: string | null = null;
 
 // Module-scoped password cache (not exposed on globalThis).
 // Cleared automatically when the MITM proxy is stopped.
@@ -154,6 +155,7 @@ export async function getMitmStatus(): Promise<{
   pid: number | null;
   dnsConfigured: boolean;
   certExists: boolean;
+  lastStartedAt: string | null;
 }> {
   // Check in-memory process first, then fallback to PID file
   let running = serverProcess !== null && !serverProcess.killed;
@@ -189,7 +191,7 @@ export async function getMitmStatus(): Promise<{
   const certDir = path.join(resolveMitmDataDir(), "mitm");
   const certExists = fs.existsSync(path.join(certDir, "server.crt"));
 
-  return { running, pid, dnsConfigured, certExists };
+  return { running, pid, dnsConfigured, certExists, lastStartedAt };
 }
 
 /**
@@ -371,6 +373,8 @@ export async function startMitm(
     throw new Error("MITM server failed to start (port 443 may be in use)");
   }
 
+  lastStartedAt = new Date().toISOString();
+
   return {
     running: true,
     pid: serverPid,
@@ -419,6 +423,7 @@ export async function stopMitm(sudoPassword: string): Promise<{ running: false; 
   await removeDNSEntry(sudoPassword);
 
   // 3. Clean up
+  lastStartedAt = null;
   clearCachedPassword(); // Clear password from memory when proxy stops
   try {
     fs.unlinkSync(PID_FILE);

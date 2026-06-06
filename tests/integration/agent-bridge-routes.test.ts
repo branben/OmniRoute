@@ -80,13 +80,54 @@ test("routeGuard: /api/tools/agent-bridge/ is SPAWN_CAPABLE", () => {
 
 // ── GET /state ─────────────────────────────────────────────────────────────
 
-test("GET /state: returns server + agents shape", async () => {
+test("GET /state: returns AgentBridgePageData shape (serverState, agentStates, bypassPatterns, mappings)", async () => {
   const res = await stateRoute.GET();
   assert.equal(res.status, 200);
   const body = await res.json() as Record<string, unknown>;
-  assert.ok("server" in body, "body.server missing");
-  assert.ok("agents" in body, "body.agents missing");
-  assert.ok(Array.isArray(body.agents), "agents should be array");
+
+  // Top-level keys must match AgentBridgePageData interface
+  assert.ok("serverState" in body, "body.serverState missing");
+  assert.ok("agentStates" in body, "body.agentStates missing");
+  assert.ok("bypassPatterns" in body, "body.bypassPatterns missing");
+  assert.ok("mappings" in body, "body.mappings missing");
+
+  // serverState must have all required fields
+  const ss = body.serverState as Record<string, unknown>;
+  assert.ok("running" in ss, "serverState.running missing");
+  assert.ok("port" in ss, "serverState.port missing");
+  assert.ok("certTrusted" in ss, "serverState.certTrusted missing");
+  assert.ok("upstreamCa" in ss, "serverState.upstreamCa missing");
+  assert.ok("lastStartedAt" in ss, "serverState.lastStartedAt missing");
+  assert.ok("activeConns" in ss, "serverState.activeConns missing");
+  assert.ok("interceptedCount" in ss, "serverState.interceptedCount missing");
+  assert.equal(typeof ss.running, "boolean");
+  assert.equal(typeof ss.port, "number");
+  assert.equal(typeof ss.certTrusted, "boolean");
+  assert.equal(typeof ss.activeConns, "number");
+  assert.equal(typeof ss.interceptedCount, "number");
+
+  // agentStates must be an array
+  assert.ok(Array.isArray(body.agentStates), "agentStates should be array");
+
+  // bypassPatterns must be an array of strings
+  assert.ok(Array.isArray(body.bypassPatterns), "bypassPatterns should be array");
+  for (const p of body.bypassPatterns as unknown[]) {
+    assert.equal(typeof p, "string");
+  }
+
+  // mappings must be a record
+  assert.equal(typeof body.mappings, "object");
+  assert.ok(body.mappings !== null, "mappings should not be null");
+});
+
+test("GET /state: serverState.running is accessible (regression: #3318)", async () => {
+  const res = await stateRoute.GET();
+  assert.equal(res.status, 200);
+  const body = await res.json() as Record<string, unknown>;
+  const ss = body.serverState as Record<string, unknown>;
+  // This must not throw TypeError: Cannot read properties of undefined (reading 'running')
+  assert.ok(ss !== undefined, "serverState must not be undefined");
+  assert.ok(typeof ss.running === "boolean", "serverState.running must be boolean");
 });
 
 test("GET /state: error responses do not leak stack traces", async () => {
