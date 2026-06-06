@@ -329,6 +329,7 @@ export async function startMitm(
     log.info({ exitCode: code }, "MITM server exited");
     serverProcess = null;
     serverPid = null;
+    lastStartedAt = null;
 
     // Remove PID file
     try {

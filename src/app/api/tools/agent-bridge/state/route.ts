@@ -5,16 +5,17 @@
  * model mappings, cert trust status, and upstream CA path.
  * LOCAL_ONLY: registered in routeGuard.ts
  */
-import { getMitmStatus, getAllAgentsStatus } from "@/mitm/manager";
+import path from "path";
+import fs from "fs";
+
 import { checkCertInstalled } from "@/mitm/cert/install";
 import { resolveMitmDataDir } from "@/mitm/dataDir";
+import { getMitmStatus, getAllAgentsStatus } from "@/mitm/manager";
 import { getAllAgentBridgeStates } from "@/lib/db/agentBridgeState";
 import { getUserBypassPatterns } from "@/lib/db/agentBridgeBypass";
 import { getMappingsForAgent } from "@/lib/db/agentBridgeMappings";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error";
 import { createErrorResponse } from "@/lib/api/errorResponse";
-import path from "path";
-import fs from "fs";
 
 const CA_PATH_FILE = path.join(resolveMitmDataDir(), "mitm", "upstream-ca.path");
 
@@ -28,19 +29,39 @@ function readStoredCaPath(): string | null {
   }
 }
 
+// Cert trust cache: avoid shelling out to `security find-certificate` on every
+// 5s poll. Re-check only when the cert file mtime changes or TTL expires.
+let certCache: { trusted: boolean; mtimeMs: number; checkedAt: number } | null = null;
+const CERT_CACHE_TTL_MS = 30_000;
+
+async function getCertTrusted(): Promise<boolean> {
+  const certPath = path.join(resolveMitmDataDir(), "mitm", "server.crt");
+  try {
+    const stat = fs.statSync(certPath);
+    const mtimeMs = stat.mtimeMs;
+    const now = Date.now();
+    if (
+      certCache &&
+      certCache.mtimeMs === mtimeMs &&
+      now - certCache.checkedAt < CERT_CACHE_TTL_MS
+    ) {
+      return certCache.trusted;
+    }
+    const trusted = await checkCertInstalled(certPath);
+    certCache = { trusted, mtimeMs, checkedAt: now };
+    return trusted;
+  } catch {
+    certCache = null;
+    return false;
+  }
+}
+
 export async function GET(): Promise<Response> {
   try {
     // Fetch MITM status and cert trust in parallel
     const [mitmStatus, certTrusted] = await Promise.all([
       getMitmStatus(),
-      (async () => {
-        try {
-          const certPath = path.join(resolveMitmDataDir(), "mitm", "server.crt");
-          return await checkCertInstalled(certPath);
-        } catch {
-          return false;
-        }
-      })(),
+      getCertTrusted(),
     ]);
 
     // Fetch DB-backed datasets in parallel

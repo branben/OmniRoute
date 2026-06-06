@@ -137,6 +137,23 @@ test("GET /state: error responses do not leak stack traces", async () => {
   assert.ok(!text.includes("at /"), "stack trace leaked in GET /state response");
 });
 
+test("GET /state: serverState.lastStartedAt is null when MITM is not running", async () => {
+  const res = await stateRoute.GET();
+  assert.equal(res.status, 200);
+  const body = await res.json() as Record<string, unknown>;
+  const ss = body.serverState as Record<string, unknown>;
+  // lastStartedAt should be null when server is not running (test env)
+  assert.ok(ss.lastStartedAt === null, "lastStartedAt should be null when MITM is stopped");
+});
+
+test("GET /state: serverState.certTrusted is boolean", async () => {
+  const res = await stateRoute.GET();
+  assert.equal(res.status, 200);
+  const body = await res.json() as Record<string, unknown>;
+  const ss = body.serverState as Record<string, unknown>;
+  assert.equal(typeof ss.certTrusted, "boolean", "certTrusted must be boolean");
+});
+
 // ── POST /server (Zod validation) ─────────────────────────────────────────
 
 test("POST /server: invalid body returns 400", async () => {
