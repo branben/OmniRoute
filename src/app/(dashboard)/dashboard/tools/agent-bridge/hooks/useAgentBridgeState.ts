@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentBridgePageData } from "../AgentBridgePageClient";
+import {
+  AgentBridgePageDataSchema,
+  getDefaultAgentBridgePageData,
+} from "@/shared/schemas/agentBridge";
+import type { AgentBridgePageData } from "@/shared/schemas/agentBridge";
 
 interface UseAgentBridgeStateOptions {
   initialData: AgentBridgePageData;
@@ -18,6 +22,7 @@ interface UseAgentBridgeStateReturn {
 /**
  * Hook for fetching and revalidating AgentBridge page data.
  * Uses fetch + polling (no SWR dependency) — project pattern from cloud-agents.
+ * Validates responses with safeParse and falls back to previous valid state.
  */
 export function useAgentBridgeState({
   initialData,
@@ -39,8 +44,20 @@ export function useAgentBridgeState({
         signal: ctrl.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as AgentBridgePageData;
-      if (!ctrl.signal.aborted) setData(json);
+      const json = await res.json();
+      const parsed = AgentBridgePageDataSchema.safeParse(json);
+      if (!ctrl.signal.aborted) {
+        if (parsed.success) {
+          setData(parsed.data);
+        } else {
+          console.error(
+            "[useAgentBridgeState] Polling: /state response failed schema validation",
+            parsed.error.flatten()
+          );
+          // Keep previous valid data — don't crash UI on bad payload
+          setError("Invalid server response");
+        }
+      }
     } catch (err) {
       if (!ctrl.signal.aborted) {
         setError(err instanceof Error ? err.message : "Unknown error");

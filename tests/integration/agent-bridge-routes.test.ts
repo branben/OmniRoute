@@ -154,6 +154,51 @@ test("GET /state: serverState.certTrusted is boolean", async () => {
   assert.equal(typeof ss.certTrusted, "boolean", "certTrusted must be boolean");
 });
 
+// ── Schema validation tests ─────────────────────────────────────────────────
+
+test("GET /state: response passes deep schema validation (AgentBridgePageData)", async () => {
+  // Import the shared schema and validate the /state response
+  const { AgentBridgePageDataSchema } = await import("../../src/shared/schemas/agentBridge.ts");
+
+  const res = await stateRoute.GET();
+  assert.equal(res.status, 200);
+  const body = await res.json();
+
+  const parsed = AgentBridgePageDataSchema.safeParse(body);
+  assert.equal(parsed.success, true, `Schema validation failed: ${JSON.stringify(parsed.error?.flatten())}`);
+});
+
+test("GET /state: invalid nested field fails schema (regression)", async () => {
+  const { AgentBridgePageDataSchema } = await import("../../src/shared/schemas/agentBridge.ts");
+
+  // Construct invalid payload: serverState.port as string instead of number
+  const invalidPayload = {
+    serverState: {
+      running: false,
+      port: "443", // invalid: should be number
+      certTrusted: false,
+      upstreamCa: null,
+      lastStartedAt: null,
+      activeConns: 0,
+      interceptedCount: 0,
+    },
+    agentStates: [],
+    bypassPatterns: [],
+    mappings: {},
+  };
+
+  const parsed = AgentBridgePageDataSchema.safeParse(invalidPayload);
+  assert.equal(parsed.success, false, "Expected schema to reject string port");
+});
+
+test("getDefaultAgentBridgePageData: produces schema-valid payload", async () => {
+  const { AgentBridgePageDataSchema, getDefaultAgentBridgePageData } = await import("../../src/shared/schemas/agentBridge.ts");
+
+  const defaults = getDefaultAgentBridgePageData();
+  const parsed = AgentBridgePageDataSchema.safeParse(defaults);
+  assert.equal(parsed.success, true, "Default factory must produce valid schema");
+});
+
 // ── POST /server (Zod validation) ─────────────────────────────────────────
 
 test("POST /server: invalid body returns 400", async () => {

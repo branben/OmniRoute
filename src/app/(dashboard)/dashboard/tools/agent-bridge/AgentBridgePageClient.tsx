@@ -9,37 +9,7 @@ import { AgentList } from "./components/AgentList";
 import { EmptyStateNoProviders } from "./components/EmptyStateNoProviders";
 import { useAgentBridgeState } from "./hooks/useAgentBridgeState";
 import type { MitmTargetView } from "@/mitm/types";
-import type { MappingRow } from "./components/ModelMappingTable";
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export interface AgentStateEntry {
-  agent_id: string;
-  dns_enabled: boolean;
-  cert_trusted: boolean;
-  setup_completed: boolean;
-  last_started_at: string | null;
-  last_error: string | null;
-}
-
-export interface AgentBridgeServerState {
-  running: boolean;
-  port: number;
-  certTrusted: boolean;
-  upstreamCa: string | null;
-  lastStartedAt: string | null;
-  activeConns: number;
-  interceptedCount: number;
-}
-
-export type AgentMappingsMap = Record<string, MappingRow[]>;
-
-export interface AgentBridgePageData {
-  serverState: AgentBridgeServerState;
-  agentStates: AgentStateEntry[];
-  bypassPatterns: string[];
-  mappings: AgentMappingsMap;
-}
+import { type AgentBridgePageData } from "@/shared/schemas/agentBridge";
 
 interface AgentBridgePageClientProps {
   initialData: AgentBridgePageData;

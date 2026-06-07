@@ -1,7 +1,11 @@
 import { getProviderConnections } from "@/lib/db/providers";
 import { ALL_TARGETS } from "@/mitm/targets/index";
+import {
+  AgentBridgePageDataSchema,
+  getDefaultAgentBridgePageData,
+} from "@/shared/schemas/agentBridge";
 import AgentBridgePageClient from "./AgentBridgePageClient";
-import type { AgentBridgePageData } from "./AgentBridgePageClient";
+import type { AgentBridgePageData } from "@/shared/schemas/agentBridge";
 
 /**
  * AgentBridge page — Server Component entry point.
@@ -20,20 +24,7 @@ export default async function AgentBridgePage() {
 
   // Fetch initial AgentBridge state from the REST API
   // Falls back to a safe default if the API isn't ready yet
-  let initialData: AgentBridgePageData = {
-    serverState: {
-      running: false,
-      port: 443,
-      certTrusted: false,
-      upstreamCa: null,
-      lastStartedAt: null,
-      activeConns: 0,
-      interceptedCount: 0,
-    },
-    agentStates: [],
-    bypassPatterns: [],
-    mappings: {},
-  };
+  let initialData = getDefaultAgentBridgePageData();
 
   try {
     const base =
@@ -44,8 +35,16 @@ export default async function AgentBridgePage() {
       headers: { "x-internal-fetch": "1" },
     });
     if (res.ok) {
-      const json = (await res.json()) as AgentBridgePageData;
-      initialData = json;
+      const json = await res.json();
+      const parsed = AgentBridgePageDataSchema.safeParse(json);
+      if (parsed.success) {
+        initialData = parsed.data;
+      } else {
+        console.error(
+          "[AgentBridgePage] SSR: /state response failed schema validation",
+          parsed.error.flatten()
+        );
+      }
     }
   } catch {
     // Backend not yet available — use defaults; client will poll

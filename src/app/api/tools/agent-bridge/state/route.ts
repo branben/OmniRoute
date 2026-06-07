@@ -16,6 +16,7 @@ import { getUserBypassPatterns } from "@/lib/db/agentBridgeBypass";
 import { getMappingsForAgent } from "@/lib/db/agentBridgeMappings";
 import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error";
 import { createErrorResponse } from "@/lib/api/errorResponse";
+import { AgentBridgePageDataSchema } from "@/shared/schemas/agentBridge";
 
 const CA_PATH_FILE = path.join(resolveMitmDataDir(), "mitm", "upstream-ca.path");
 
@@ -107,12 +108,27 @@ export async function GET(): Promise<Response> {
       interceptedCount: 0,
     };
 
-    return Response.json({
+    const pageData = {
       serverState,
       agentStates,
       bypassPatterns,
       mappings: Object.keys(mappings).length > 0 ? mappings : emptyMappings,
-    });
+    };
+
+    // Validate outbound payload matches contract — catch contract regressions early
+    const parsed = AgentBridgePageDataSchema.safeParse(pageData);
+    if (!parsed.success) {
+      console.error(
+        "[/state] Outbound payload failed schema validation:",
+        parsed.error.flatten()
+      );
+      return createErrorResponse({
+        status: 500,
+        message: "Internal: /state response schema mismatch",
+      });
+    }
+
+    return Response.json(parsed.data);
   } catch (err) {
     const msg = sanitizeErrorMessage(err instanceof Error ? err.message : String(err));
     return createErrorResponse({ status: 500, message: msg });
