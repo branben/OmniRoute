@@ -48,6 +48,11 @@ import {
 import { omniRouteFetch, toRecord, toArray, toString, toNumber } from "../server.ts";
 import { logToolCall } from "../audit.ts";
 import { normalizeQuotaResponse } from "../../../src/shared/contracts/quota.ts";
+import {
+  evaluateToolScopes,
+  resolveCallerScopeContext,
+  type McpToolExtraLike,
+} from "../scopeEnforcement.ts";
 
 // Re-export types
 export type { TextToolResult } from "../toolResult.ts";
@@ -59,6 +64,15 @@ export type { TextToolResult } from "../toolResult.ts";
 const PROTOCOL_VERSION = "2026-07-28";
 const SERVER_NAME = "omniroute";
 const SERVER_VERSION = process.env.npm_package_version || "3.8.51";
+
+// Scope enforcement — reuses v1's scopeEnforcement.ts
+const MCP_ENFORCE_SCOPES = process.env.OMNIROUTE_MCP_ENFORCE_SCOPES === "true";
+const MCP_ALLOWED_SCOPES = new Set(
+  (process.env.OMNIROUTE_MCP_SCOPES || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
 
 // Cache TTLs per resource type (milliseconds)
 const CACHE_TTL = {
@@ -286,12 +300,48 @@ export function createMcpServerV2(): McpServerV2 {
         ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
       },
       // @ts-ignore: handler wrapping
-      async (args: Record<string, unknown>) => {
+      async (args: Record<string, unknown>, extra?: McpToolExtraLike) => {
         const params = args as Record<string, unknown>;
         const meta = extractMeta(params);
 
-        // In production, meta would be used for auth/auditing.
-        // For now, we extract it to prove the contract.
+        // Scope enforcement — reuses v1's scopeEnforcement.ts
+        const scopeContext = resolveCallerScopeContext(extra, Array.from(MCP_ALLOWED_SCOPES));
+        const scopeCheck = evaluateToolScopes(
+          tool.name,
+          scopeContext.scopes,
+          MCP_ENFORCE_SCOPES,
+          tool.scopes
+        );
+        if (!scopeCheck.allowed) {
+          const missingScopes =
+            scopeCheck.missing.length > 0 ? scopeCheck.missing.join(", ") : "unavailable";
+          const reason = scopeCheck.reason || "scope_check_failed";
+          const msg =
+            `Insufficient MCP scopes for ${tool.name}. ` +
+            `Missing: ${missingScopes}. ` +
+            `Caller=${scopeContext.callerId}, source=${scopeContext.source}.`;
+          await logToolCall(
+            tool.name,
+            {
+              ...toRecord(args),
+              _scopeCheck: {
+                callerId: scopeContext.callerId,
+                source: scopeContext.source,
+                required: scopeCheck.required,
+                provided: scopeCheck.provided,
+                missing: scopeCheck.missing,
+              },
+            },
+            null,
+            0,
+            false,
+            `scope_denied:${reason}`
+          );
+          return {
+            content: [{ type: "text" as const, text: `Error: ${msg}` }],
+            isError: true,
+          };
+        }
 
         // Dispatch to the appropriate handler based on tool name
         // Each handler returns content; we wrap with resultType
@@ -322,6 +372,7 @@ export function createMcpServerV2(): McpServerV2 {
       description: t.description,
       inputSchema: t.inputSchema,
       ...(t.outputSchema ? { outputSchema: t.outputSchema } : {}),
+      scopes: Array.from(t.scopes),
     }));
 
     return withCacheHints(withResultType({ tools }), CACHE_TTL.tools, cacheScope);

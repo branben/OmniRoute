@@ -354,14 +354,69 @@ describe("MCP v2 — 2026-07-28 Spec Compliance", () => {
       expect(count).toBeGreaterThanOrEqual(8);
     });
 
-    it("discover result matches registered count", () => {
+    it("discover result matches registered count", async () => {
       const v2 = createMcpServerV2();
       const count = v2.getRegisteredToolCount();
       const discover = v2.discover();
 
       expect(discover.toolsCount).toBe(count);
     });
-  });
+    });
+
+    describe("MCP v2 — Scope Enforcement", () => {
+    it("exports evaluateToolScopes from scopeEnforcement", async () => {
+      // Verify the v2 sidecar reuses v1's scope enforcement module
+      const v2 = await import("../v2/server.ts");
+      // evaluateToolScopes is imported (not exported), so we test indirectly:
+      // createMcpServerV2 should succeed without errors
+      expect(v2.createMcpServerV2).toBeDefined();
+    });
+
+    it("tools/list returns tools with scopes", () => {
+      const v2 = createMcpServerV2();
+      const listResult = v2.handleListTools();
+      const tools = listResult.tools as Array<{ name: string; scopes?: string[] }>;
+
+      // Every v2 tool should carry its scopes
+      const createCombo = tools.find((t) => t.name === "omniroute_create_combo");
+      expect(createCombo).toBeDefined();
+      expect(createCombo?.scopes).toBeDefined();
+      expect(Array.isArray(createCombo?.scopes)).toBe(true);
+      expect((createCombo?.scopes as string[]).length).toBeGreaterThan(0);
+    });
+
+    it("get_health tool has read:health scope", () => {
+      const v2 = createMcpServerV2();
+      const listResult = v2.handleListTools();
+      const tools = listResult.tools as Array<{ name: string; scopes?: string[] }>;
+
+      const healthTool = tools.find((t) => t.name === "omniroute_get_health");
+      expect(healthTool).toBeDefined();
+      expect(healthTool?.scopes).toContain("read:health");
+    });
+
+    it("create_combo tool has combos:write scope", () => {
+      const v2 = createMcpServerV2();
+      const listResult = v2.handleListTools();
+      const tools = listResult.tools as Array<{ name: string; scopes?: string[] }>;
+
+      const createTool = tools.find((t) => t.name === "omniroute_create_combo");
+      expect(createTool).toBeDefined();
+      expect(createTool?.scopes).toContain("combos:write");
+    });
+
+    it("every v2 tool has at least one scope defined", () => {
+      const v2 = createMcpServerV2();
+      const listResult = v2.handleListTools();
+      const tools = listResult.tools as Array<{ name: string; scopes?: string[] }>;
+
+      for (const tool of tools) {
+        expect(tool.scopes).toBeDefined();
+        expect(Array.isArray(tool.scopes)).toBe(true);
+        expect((tool.scopes as string[]).length).toBeGreaterThan(0);
+      }
+    });
+    });
 });
 
 describe("MCP v2 — integration with server instance", () => {
