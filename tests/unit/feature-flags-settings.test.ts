@@ -54,7 +54,9 @@ const {
 // pool member, default off) takes it to 82; USAGE_LIMIT_IGNORE_UNPRICED (#14799,
 // opt-in flag to count unpriced usage as $0 in USD quotas, default off) to 83;
 // REASONING_REPLAY_ENABLED (#12486, default on) to 84.
-const EXPECTED_FEATURE_FLAG_COUNT = 84;
+// OMNIROUTE_MCP_V2 (experimental 2026-07-28 spec MCP v2 sidecar, default off;
+// v1 untouched) takes the registry to 85.
+const EXPECTED_FEATURE_FLAG_COUNT = 85;
 
 // ──────────────────────────────────────────────────────
 // Test group 1 — Flag definitions registry
